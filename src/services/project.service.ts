@@ -90,7 +90,28 @@ export async function enrichWithSignedUrls(project: NonNullable<Awaited<ReturnTy
     signedVideoUrl,
     signedThumbnailUrl,
     signedSongUrl,
+    signedFinalVideoUrl: null as string | null,
   };
+}
+
+/**
+ * Enrich project with signed final video URL from the exports bucket.
+ */
+export async function enrichWithFinalVideoUrl(
+  enriched: Awaited<ReturnType<typeof enrichWithSignedUrls>>
+) {
+  if (!(enriched as any).finalVideoUrl) return enriched;
+
+  try {
+    const signedFinalVideoUrl = await storageService.getSignedDownloadUrl(
+      "exports",
+      (enriched as any).finalVideoUrl
+    );
+    return { ...enriched, signedFinalVideoUrl };
+  } catch (e) {
+    console.error("[Project] Failed to sign final video URL:", e);
+    return enriched;
+  }
 }
 
 /**
@@ -119,6 +140,7 @@ export async function updateProject(
   data: {
     videoUrl?: string;
     thumbnailUrl?: string;
+    finalVideoUrl?: string;
     duration?: number;
     status?: ProjectStatus;
     title?: string;

@@ -10,6 +10,7 @@ import {
   handleGetSegments,
   handleSyncSegments,
   handleSelectSong,
+  handleRenderProject,
 } from "../controllers/project.controller.js";
 
 const router = Router();
@@ -25,6 +26,7 @@ router.post("/:id/upload-complete", handleConfirmUpload);
 router.get("/:id/segments", handleGetSegments);
 router.put("/:id/segments", handleSyncSegments);
 router.put("/:id/song", handleSelectSong);
+router.post("/:id/render", handleRenderProject);
 router.delete("/:id", handleDeleteProject);
 
 export default router;

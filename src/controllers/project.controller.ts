@@ -7,6 +7,7 @@ import {
   confirmUploadSchema,
   syncSegmentsSchema,
   selectSongSchema,
+  renderProjectSchema,
 } from "../validators/project.validators.js";
 import * as projectService from "../services/project.service.js";
 import * as storageService from "../services/storage.service.js";
@@ -62,7 +63,8 @@ export async function handleGetProject(req: Request, res: Response, next: NextFu
     }
 
     const enriched = await projectService.enrichWithSignedUrls(project);
-    res.json({ success: true, project: enriched });
+    const withFinal = await projectService.enrichWithFinalVideoUrl(enriched);
+    res.json({ success: true, project: withFinal });
   } catch (error) {
     next(error);
   }
@@ -234,6 +236,9 @@ export async function handleDeleteProject(req: Request, res: Response, next: Nex
     if (deleted.thumbnailUrl) {
       storageService.deleteFromStorage("thumbnails", [deleted.thumbnailUrl]).catch(() => {});
     }
+    if ((deleted as any).finalVideoUrl) {
+      storageService.deleteFromStorage("exports", [(deleted as any).finalVideoUrl]).catch(() => {});
+    }
 
     res.json({ success: true, message: "Project deleted" });
   } catch (error) {
@@ -258,6 +263,93 @@ export async function handleSelectSong(req: Request, res: Response, next: NextFu
     }
 
     res.json({ success: true, project: updated });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * POST /api/projects/:id/render — Start rendering the final video
+ */
+export async function handleRenderProject(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.userId;
+    const projectId = req.params.id as string;
+
+    const project = await projectService.getProjectById(projectId, userId);
+    if (!project) {
+      res.status(404).json({ success: false, message: "Project not found" });
+      return;
+    }
+
+    // Validate prerequisites
+    if (!project.videoUrl) {
+      res.status(400).json({ success: false, message: "No video uploaded for this project" });
+      return;
+    }
+    if (!project.selectedSongId || !project.selectedSong) {
+      res.status(400).json({ success: false, message: "No song selected for this project" });
+      return;
+    }
+    if (project.status === "RENDERING") {
+      res.status(409).json({ success: false, message: "Project is already rendering" });
+      return;
+    }
+
+    // Parse optional quality param
+    renderProjectSchema.parse(req.body || {});
+
+    // Set status to RENDERING
+    await projectService.updateProject(projectId, { status: "RENDERING" });
+
+    // Respond immediately — rendering happens async
+    res.status(202).json({
+      success: true,
+      message: "Rendering started. Poll GET /projects/:id for status.",
+      project: { id: projectId, status: "RENDERING" },
+    });
+
+    // ── Async background rendering ──
+    (async () => {
+      try {
+        console.log(`[Render] Starting render for project ${projectId}`);
+
+        // Get signed download URLs
+        const videoDownloadUrl = await storageService.getSignedDownloadUrl("videos", project.videoUrl!);
+        const songDownloadUrl = await storageService.getSignedDownloadUrl("songs", project.selectedSong!.fileUrl!);
+
+        // Get the video duration
+        const duration = project.duration || 30; // fallback to 30s
+
+        // Render the final video
+        const finalPath = await videoService.renderFinalVideo(
+          videoDownloadUrl,
+          songDownloadUrl,
+          project.segments.map(s => ({
+            start: s.start,
+            end: s.end,
+            track: s.track as "ORIGINAL" | "SONG",
+            volume: s.volume,
+            order: s.order,
+          })),
+          duration,
+          userId,
+          projectId
+        );
+
+        // Update project with final video URL and status
+        await projectService.updateProject(projectId, {
+          finalVideoUrl: finalPath,
+          status: "EXPORTED",
+        });
+
+        console.log(`[Render] Project ${projectId} render complete → ${finalPath}`);
+      } catch (err) {
+        console.error(`[Render] Render failed for project ${projectId}:`, err);
+        // Set status back to DRAFT so it's not stuck in RENDERING
+        await projectService.updateProject(projectId, { status: "DRAFT" }).catch(() => {});
+      }
+    })();
   } catch (error) {
     next(error);
   }

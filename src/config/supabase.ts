@@ -23,6 +23,10 @@ export async function ensureStorageBuckets() {
       name: "songs",
       mimeTypes: ["audio/mpeg", "audio/mp3", "audio/wav", "audio/ogg", "audio/aac"],
     },
+    {
+      name: "exports",
+      mimeTypes: ["video/mp4", "video/webm"],
+    },
   ];
 
   for (const bucket of buckets) {

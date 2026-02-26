@@ -14,3 +14,16 @@ export const prisma =
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
 }
+
+// Eagerly connect so the first request isn't slow / doesn't fail
+prisma.$connect().catch((err) => {
+  console.error("[Prisma] Failed to connect on startup – will retry on first query", err.message);
+});
+
+// Graceful shutdown — release pool connections
+const shutdown = async () => {
+  await prisma.$disconnect();
+  process.exit(0);
+};
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);

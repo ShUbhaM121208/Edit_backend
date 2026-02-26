@@ -44,3 +44,12 @@ export const syncSegmentsSchema = z.object({
 export const selectSongSchema = z.object({
   songId: z.string().uuid("Invalid song ID"),
 });
+
+export const renderProjectSchema = z.object({
+  quality: z
+    .enum(["720p", "1080p"], {
+      errorMap: () => ({ message: "Quality must be 720p or 1080p" }),
+    })
+    .default("1080p")
+    .optional(),
+});
