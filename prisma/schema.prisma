@@ -1,0 +1,103 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ──────────────────────────────────────
+// ENUMS
+// ──────────────────────────────────────
+
+enum ProjectStatus {
+  DRAFT
+  PROCESSING
+  EXPORTED
+}
+
+enum Mood {
+  CHILL
+  ENERGETIC
+  ROMANTIC
+  DRAMATIC
+  UPBEAT
+}
+
+enum Track {
+  ORIGINAL
+  SONG
+}
+
+// ──────────────────────────────────────
+// MODELS
+// ──────────────────────────────────────
+
+model User {
+  id                 String    @id @default(uuid()) @db.Uuid
+  phone              String    @unique
+  countryCode        String    @default("+91")
+  name               String?
+  instagramConnected Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  projects           Project[]
+
+  @@map("users")
+}
+
+model Project {
+  id             String        @id @default(uuid()) @db.Uuid
+  title          String
+  status         ProjectStatus @default(DRAFT)
+  videoUrl       String?
+  thumbnailUrl   String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  // Relations
+  userId         String        @db.Uuid
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  selectedSongId String?       @db.Uuid
+  selectedSong   Song?         @relation(fields: [selectedSongId], references: [id], onDelete: SetNull)
+
+  segments       TimelineSegment[]
+
+  @@index([userId])
+  @@index([selectedSongId])
+  @@map("projects")
+}
+
+model Song {
+  id       String   @id @default(uuid()) @db.Uuid
+  title    String
+  artist   String
+  duration String
+  mood     Mood
+  fileUrl  String?
+  createdAt DateTime @default(now())
+
+  projects Project[]
+
+  @@map("songs")
+}
+
+model TimelineSegment {
+  id        String   @id @default(uuid()) @db.Uuid
+  start     Float
+  end       Float
+  track     Track
+  volume    Int      @default(100)
+  order     Int
+  createdAt DateTime @default(now())
+
+  // Relations
+  projectId String  @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("timeline_segments")
+}
