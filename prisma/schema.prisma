@@ -54,6 +54,7 @@ model Project {
   status         ProjectStatus @default(DRAFT)
   videoUrl       String?
   thumbnailUrl   String?
+  duration       Float?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 

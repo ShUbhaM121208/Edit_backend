@@ -5,6 +5,8 @@ import cookieParser from "cookie-parser";
 import { env } from "./config/env.js";
 import { errorHandler } from "./middleware/error.middleware.js";
 import authRoutes from "./routes/auth.routes.js";
+import projectRoutes from "./routes/project.routes.js";
+import { ensureStorageBuckets } from "./config/supabase.js";
 
 export function createApp() {
   const app = express();
@@ -46,6 +48,7 @@ export function createApp() {
   // ──────────────────────────────────────
 
   app.use("/api/auth", authRoutes);
+  app.use("/api/projects", projectRoutes);
 
   // ──────────────────────────────────────
   // Error Handler (must be last)
@@ -62,10 +65,13 @@ export function createApp() {
 
 const app = createApp();
 
-app.listen(env.PORT, () => {
+app.listen(env.PORT, async () => {
   console.log(`\n🚀 ReelMix API running on http://localhost:${env.PORT}`);
   console.log(`   Environment: ${env.NODE_ENV}`);
   console.log(`   Frontend:    ${env.FRONTEND_URL}\n`);
+
+  // Initialize storage buckets
+  await ensureStorageBuckets();
 });
 
 export default app;

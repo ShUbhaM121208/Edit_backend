@@ -31,7 +31,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     const payload = validateAuthToken(token);
 
     // Attach user info to the request object
-    (req as any).user = payload;
+    req.user = payload;
 
     next();
   } catch (error) {
