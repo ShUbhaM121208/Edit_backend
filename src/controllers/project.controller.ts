@@ -1,8 +1,12 @@
 import type { Request, Response, NextFunction } from "express";
+import { randomUUID } from "crypto";
+import path from "path";
 import {
   createProjectSchema,
   requestUploadUrlSchema,
   confirmUploadSchema,
+  syncSegmentsSchema,
+  selectSongSchema,
 } from "../validators/project.validators.js";
 import * as projectService from "../services/project.service.js";
 import * as storageService from "../services/storage.service.js";
@@ -45,7 +49,7 @@ export async function handleGetProjects(req: Request, res: Response, next: NextF
 }
 
 /**
- * GET /api/projects/:id — Get a single project
+ * GET /api/projects/:id — Get a single project (with signed URLs)
  */
 export async function handleGetProject(req: Request, res: Response, next: NextFunction) {
   try {
@@ -57,7 +61,8 @@ export async function handleGetProject(req: Request, res: Response, next: NextFu
       return;
     }
 
-    res.json({ success: true, project });
+    const enriched = await projectService.enrichWithSignedUrls(project);
+    res.json({ success: true, project: enriched });
   } catch (error) {
     next(error);
   }
@@ -80,8 +85,10 @@ export async function handleRequestUploadUrl(req: Request, res: Response, next: 
 
     const { filename, contentType } = requestUploadUrlSchema.parse(req.body);
 
-    // Build storage path: videos/{userId}/{projectId}/{filename}
-    const storagePath = `${userId}/${projectId}/${filename}`;
+    // Build storage path with a safe UUID-based name (preserving extension)
+    const ext = path.extname(filename) || ".mp4";
+    const safeName = `${randomUUID()}${ext}`;
+    const storagePath = `${userId}/${projectId}/${safeName}`;
 
     const uploadData = await storageService.generateSignedUploadUrl("videos", storagePath);
 
@@ -161,6 +168,52 @@ export async function handleConfirmUpload(req: Request, res: Response, next: Nex
 }
 
 /**
+ * GET /api/projects/:id/segments — Get timeline segments for a project
+ */
+export async function handleGetSegments(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.userId;
+    const projectId = req.params.id as string;
+
+    const project = await projectService.getProjectById(projectId, userId);
+    if (!project) {
+      res.status(404).json({ success: false, message: "Project not found" });
+      return;
+    }
+
+    const segments = await projectService.getSegmentsByProject(projectId);
+
+    res.json({ success: true, segments });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * PUT /api/projects/:id/segments — Replace all timeline segments for a project
+ */
+export async function handleSyncSegments(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.userId;
+    const projectId = req.params.id as string;
+
+    const project = await projectService.getProjectById(projectId, userId);
+    if (!project) {
+      res.status(404).json({ success: false, message: "Project not found" });
+      return;
+    }
+
+    const { segments } = syncSegmentsSchema.parse(req.body);
+
+    const updated = await projectService.syncSegments(projectId, segments);
+
+    res.json({ success: true, segments: updated });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
  * DELETE /api/projects/:id — Delete a project and its storage files
  */
 export async function handleDeleteProject(req: Request, res: Response, next: NextFunction) {
@@ -183,6 +236,28 @@ export async function handleDeleteProject(req: Request, res: Response, next: Nex
     }
 
     res.json({ success: true, message: "Project deleted" });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * PUT /api/projects/:id/song — Select a song for a project
+ */
+export async function handleSelectSong(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.userId;
+    const projectId = req.params.id as string;
+
+    const { songId } = selectSongSchema.parse(req.body);
+
+    const updated = await projectService.selectSongForProject(projectId, songId, userId);
+    if (!updated) {
+      res.status(404).json({ success: false, message: "Project not found" });
+      return;
+    }
+
+    res.json({ success: true, project: updated });
   } catch (error) {
     next(error);
   }

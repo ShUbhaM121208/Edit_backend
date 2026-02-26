@@ -6,6 +6,7 @@ import { env } from "./config/env.js";
 import { errorHandler } from "./middleware/error.middleware.js";
 import authRoutes from "./routes/auth.routes.js";
 import projectRoutes from "./routes/project.routes.js";
+import songRoutes from "./routes/song.routes.js";
 import { ensureStorageBuckets } from "./config/supabase.js";
 
 export function createApp() {
@@ -49,6 +50,7 @@ export function createApp() {
 
   app.use("/api/auth", authRoutes);
   app.use("/api/projects", projectRoutes);
+  app.use("/api/songs", songRoutes);
 
   // ──────────────────────────────────────
   // Error Handler (must be last)

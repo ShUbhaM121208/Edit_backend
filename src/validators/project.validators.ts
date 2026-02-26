@@ -24,3 +24,23 @@ export const confirmUploadSchema = z.object({
     .string()
     .min(1, "Storage path is required"),
 });
+
+export const syncSegmentsSchema = z.object({
+  segments: z
+    .array(
+      z.object({
+        start: z.number().min(0, "Start must be >= 0"),
+        end: z.number().min(0, "End must be >= 0"),
+        track: z.enum(["ORIGINAL", "SONG"], {
+          errorMap: () => ({ message: "Track must be ORIGINAL or SONG" }),
+        }),
+        volume: z.number().int().min(0).max(100).default(100),
+        order: z.number().int().min(0),
+      })
+    )
+    .max(50, "Maximum 50 segments allowed"),
+});
+
+export const selectSongSchema = z.object({
+  songId: z.string().uuid("Invalid song ID"),
+});

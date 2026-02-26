@@ -1,5 +1,6 @@
 import { prisma } from "../lib/prisma.js";
-import type { ProjectStatus } from "@prisma/client";
+import type { ProjectStatus, Track } from "@prisma/client";
+import * as storageService from "./storage.service.js";
 
 /**
  * Create a new project for a user.
@@ -40,12 +41,74 @@ export async function getProjectsByUser(userId: string) {
 export async function getProjectById(projectId: string, userId: string) {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
+    include: {
+      segments: { orderBy: { order: "asc" } },
+      selectedSong: true,
+    },
   });
 
   if (!project) return null;
   if (project.userId !== userId) return null;
 
   return project;
+}
+
+/**
+ * Enrich project with signed download URLs for video, thumbnail, and song.
+ */
+export async function enrichWithSignedUrls(project: NonNullable<Awaited<ReturnType<typeof getProjectById>>>) {
+  let signedVideoUrl: string | null = null;
+  let signedThumbnailUrl: string | null = null;
+  let signedSongUrl: string | null = null;
+
+  try {
+    if (project.videoUrl) {
+      signedVideoUrl = await storageService.getSignedDownloadUrl("videos", project.videoUrl);
+    }
+  } catch (e) {
+    console.error("[Project] Failed to sign video URL:", e);
+  }
+
+  try {
+    if (project.thumbnailUrl) {
+      signedThumbnailUrl = await storageService.getSignedDownloadUrl("thumbnails", project.thumbnailUrl);
+    }
+  } catch (e) {
+    console.error("[Project] Failed to sign thumbnail URL:", e);
+  }
+
+  try {
+    if (project.selectedSong?.fileUrl) {
+      signedSongUrl = await storageService.getSignedDownloadUrl("songs", project.selectedSong.fileUrl);
+    }
+  } catch (e) {
+    console.error("[Project] Failed to sign song URL:", e);
+  }
+
+  return {
+    ...project,
+    signedVideoUrl,
+    signedThumbnailUrl,
+    signedSongUrl,
+  };
+}
+
+/**
+ * Link a song to a project.
+ */
+export async function selectSongForProject(projectId: string, songId: string, userId: string) {
+  const project = await getProjectById(projectId, userId);
+  if (!project) return null;
+
+  // Verify song exists
+  const song = await prisma.song.findUnique({ where: { id: songId } });
+  if (!song) throw new Error("Song not found");
+
+  return prisma.project.update({
+    where: { id: projectId },
+    data: { selectedSongId: songId },
+    include: { selectedSong: true },
+  });
 }
 
 /**
@@ -64,6 +127,58 @@ export async function updateProject(
   return prisma.project.update({
     where: { id: projectId },
     data,
+  });
+}
+
+// ─── Timeline Segments ───────────────────────────────────────
+
+/**
+ * Get all segments for a project, ordered by `order`.
+ */
+export async function getSegmentsByProject(projectId: string) {
+  return prisma.timelineSegment.findMany({
+    where: { projectId },
+    orderBy: { order: "asc" },
+  });
+}
+
+/**
+ * Replace all segments for a project in a single transaction.
+ * Deletes existing segments then creates the new ones.
+ */
+export async function syncSegments(
+  projectId: string,
+  segments: {
+    start: number;
+    end: number;
+    track: Track;
+    volume: number;
+    order: number;
+  }[]
+) {
+  return prisma.$transaction(async (tx) => {
+    // Delete all existing segments for the project
+    await tx.timelineSegment.deleteMany({ where: { projectId } });
+
+    // Create all new segments
+    if (segments.length > 0) {
+      await tx.timelineSegment.createMany({
+        data: segments.map((seg) => ({
+          projectId,
+          start: seg.start,
+          end: seg.end,
+          track: seg.track,
+          volume: seg.volume,
+          order: seg.order,
+        })),
+      });
+    }
+
+    // Return the newly created segments
+    return tx.timelineSegment.findMany({
+      where: { projectId },
+      orderBy: { order: "asc" },
+    });
   });
 }
 
