@@ -22,6 +22,33 @@ export async function findOrCreateUser(phone: string, countryCode: string) {
 }
 
 /**
+ * Update the user's Instagram connection status.
+ */
+export async function updateInstagramConnection(
+  userId: string,
+  connected: boolean,
+  username?: string | null
+) {
+  return prisma.user.update({
+    where: { id: userId },
+    data: {
+      instagramConnected: connected,
+      instagramUsername: connected ? (username ?? null) : null,
+    },
+    select: {
+      id: true,
+      phone: true,
+      countryCode: true,
+      name: true,
+      instagramConnected: true,
+      instagramUsername: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+}
+
+/**
  * Generate a JWT for the given user.
  */
 export function createAuthToken(userId: string, phone: string): string {
@@ -48,6 +75,7 @@ export async function getUserById(userId: string) {
       countryCode: true,
       name: true,
       instagramConnected: true,
+      instagramUsername: true,
       createdAt: true,
       updatedAt: true,
     },

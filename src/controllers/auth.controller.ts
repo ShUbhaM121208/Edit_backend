@@ -5,6 +5,7 @@ import {
   findOrCreateUser,
   createAuthToken,
   getUserById,
+  updateInstagramConnection,
 } from "../services/auth.service.js";
 
 /**
@@ -56,6 +57,7 @@ export async function handleVerifyOtp(req: Request, res: Response, next: NextFun
         countryCode: user.countryCode,
         name: user.name,
         instagramConnected: user.instagramConnected,
+        instagramUsername: (user as any).instagramUsername ?? null,
       },
     });
   } catch (error) {
@@ -83,6 +85,48 @@ export async function handleGetMe(req: Request, res: Response, next: NextFunctio
     }
 
     res.json({ success: true, user });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * POST /api/auth/instagram/connect
+ * Body: { username?: string }
+ * Simulated Instagram OAuth — marks user as connected.
+ */
+export async function handleConnectInstagram(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = (req as any).user?.userId;
+    if (!userId) {
+      res.status(401).json({ success: false, message: "Unauthorized" });
+      return;
+    }
+
+    const { username } = req.body as { username?: string };
+    const user = await updateInstagramConnection(userId, true, username || null);
+
+    res.json({ success: true, message: "Instagram connected", user });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * POST /api/auth/instagram/disconnect
+ * Removes the Instagram connection.
+ */
+export async function handleDisconnectInstagram(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = (req as any).user?.userId;
+    if (!userId) {
+      res.status(401).json({ success: false, message: "Unauthorized" });
+      return;
+    }
+
+    const user = await updateInstagramConnection(userId, false);
+
+    res.json({ success: true, message: "Instagram disconnected", user });
   } catch (error) {
     next(error);
   }
